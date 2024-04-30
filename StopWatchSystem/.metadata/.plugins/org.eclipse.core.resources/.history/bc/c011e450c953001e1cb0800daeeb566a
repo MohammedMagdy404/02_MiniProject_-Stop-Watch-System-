@@ -1,0 +1,17 @@
+/*
+ * pomodoroBuzzer.c
+ *
+ *  Created on: Sep 15, 2023
+ *      Author: mm929
+ */
+
+#include "header.h"
+
+
+void pomodoroBuzzer(void){
+	if((_7seg.MIN2*10 + _7seg.MIN1) % 25 == 0){
+		PORTD |= (1<<PD0);
+		_delay_ms(500);
+		PORTD &= ~(1<<PD0);
+	}
+}

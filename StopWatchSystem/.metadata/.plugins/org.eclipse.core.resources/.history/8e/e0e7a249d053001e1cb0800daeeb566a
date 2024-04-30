@@ -1,0 +1,248 @@
+/*
+ * main.c
+ *
+ *  Created on: Sep 14, 2023
+ *      Author: mm929
+ */
+
+#include "header.h"
+
+unsigned char tick = 0;
+unsigned char f_int0 = 0;
+unsigned char pause = 0;
+
+
+// Configure the structure of the 7-SEG
+struct _7segment{
+	unsigned char SEC1;
+	unsigned char SEC2;
+	unsigned char MIN1;
+	unsigned char MIN2;
+	unsigned char HOUR1;
+	unsigned char HOUR2;
+}_7seg = {6,5,4,2,0,0};
+
+
+
+ISR(TIMER1_COMPA_vect){
+	tick++;
+	if(tick == ocr_num){
+		incSec();
+		tick = 0;
+	}
+}
+
+
+ISR(INT0_vect){
+	f_int0 = 1;
+}
+
+
+ISR(INT1_vect){
+	// Deactivate the CLK of the TIMER1
+	TCCR1B &= ~(1<<CS10) & ~(1<<CS12);
+}
+
+
+ISR(INT2_vect){
+
+	TCCR1B = (1<<WGM12) | (1<<CS10) | (1<<CS12);
+}
+
+
+void INT0_init(void){
+	// Enable Interrupt INT0 internal PULL-UP
+	// Configure the input PIN (PD2)
+	DDRD &= ~(1<<PD2);
+	PORTD |= (1<<PD2);
+
+	GICR |= (1<<INT0);
+	MCUCR |= (1<<ISC10);
+}
+
+
+void INT1_init(void){
+	// Enable Interrupt INT1 External PULL-Down
+	// Configure the input PIN (PD3)
+	DDRD &= ~(1<<PD3);
+
+	GICR |= (1<<INT1);
+	MCUCR |= (1<<ISC11) | (1<<ISC10);
+}
+
+
+void INT2_init(void){
+
+	// Enable Interrupt INT2 internal PULL-UP
+	// Configure the input PIN (PB2)
+	DDRB &= ~(1<<PB2);
+	PORTB |= (1<<PB2);
+
+	GICR |= (1<<INT2);
+	//MCUCSR &= ~(1<<ISC2);
+}
+
+
+void timer1_init(unsigned long tck){
+	//	Configure Timer1 control register
+	//	Enable the CTC MODE WGM12
+	// 	Activate the CLK and Set the PreScaler on 1024
+	TCCR1B = (1<<WGM12) | (1<<CS10) | (1<<CS12);
+
+	//	adjust the counter and Output Compare REG
+	TCNT1 = 0;
+	OCR1A = tck;
+
+	// Enable Interrupt For Timer1ِ
+	TIMSK |= (1<<OCIE1A);
+}
+
+
+int main(void){
+
+	// configuring pins of the MC
+	pinConf();
+
+
+	// Enable (Global Interrupt Enable) for all INTS
+	SREG |= (1<<7);
+
+
+	// Starting the Timer1
+	timer1_init(770);
+
+
+	// starting the 3 Interrupts INT0, INT1, INT2
+	INT0_init();
+	INT1_init();
+	INT2_init();
+
+
+	unsigned char i = 1;
+
+	//	Loop to make System runs only (Polling)
+	while(1){
+
+		pomodoroBuzzer();
+
+		// Checking if reset button is pressed
+		if(f_int0){
+			_7seg.SEC1 = 0;
+			_7seg.SEC2 = 0;
+			_7seg.MIN1 = 0;
+			_7seg.MIN2 = 0;
+			_7seg.HOUR1 = 0;
+			_7seg.HOUR2 = 0;
+			// timer is reseted return to normal mode
+			f_int0 = 0;
+		}
+
+		// Displaying all 7-SEGs all the time
+		if(i<=6){
+			Display_7seg(i);
+			//_delay_ms(5);
+			i++;
+		}else{
+			i = 0;
+		}
+	}
+
+}
+
+
+
+// Function for Controlling Increasing of Seconds
+void incSec(void){
+	if(_7seg.SEC1 == 9 && _7seg.SEC2 == 5){
+		incMin();
+	}else if(_7seg.SEC1 == 9){
+		_7seg.SEC2++;
+		_7seg.SEC1 = 0;
+	}else{
+		_7seg.SEC1++;
+	}
+}
+
+// Function for Controlling Increasing of Minutes
+void incMin(void){
+	_7seg.SEC1 = _7seg.SEC2 = 0;
+
+	if(_7seg.MIN1 == 9 && _7seg.MIN2 == 5){
+		incHour();
+	}else if(_7seg.MIN1 == 9){
+		_7seg.MIN2++;
+		_7seg.MIN1 = 0;
+	}else{
+		_7seg.MIN1++;
+	}
+}
+
+// Function for Controlling Increasing of Hours
+void incHour(void){
+	_7seg.SEC1 = _7seg.SEC2 = 0;
+	_7seg.MIN1 = _7seg.MIN2 = 0;
+
+	if(_7seg.HOUR1 == 9 && _7seg.HOUR2 == 5){
+		_7seg.HOUR1 = _7seg.HOUR2 = 0;
+	}else if(_7seg.HOUR1 == 9){
+		_7seg.HOUR2++;
+		_7seg.HOUR1 = 0;
+	}else{
+		_7seg.HOUR1++;
+	}
+}
+
+// function for Displaying Specific (Given) 7-SEG
+void Display_7seg(int val){
+	switch(val){
+	case 1:
+		// Enable 7seg of SEC1 from selection lines (Multiplexing)
+		// Display the count of SEC1 on selected 7seg
+		PORTA = 0xC1;
+		PORTC = (PORTC & 0xF0) | (_7seg.SEC1 & 0x0F);
+		break;
+
+	case 2:
+		// Enable 7seg of SEC2 from selection lines (Multiplexing)
+		// Display the count of SEC2 on selected 7seg
+		PORTA = 0xC2;
+		PORTC = (PORTC & 0xF0) | (_7seg.SEC2 & 0x0F);
+		break;
+	case 3:
+		// Enable 7seg of MIN1 from selection lines (Multiplexing)
+		// Display the count of MIN1 on selected 7seg
+		PORTA = 0xC4;
+		PORTC = (PORTC & 0xF0) | (_7seg.MIN1 & 0x0F);
+		break;
+	case 4:
+		// Enable 7seg of MIN2 from selection lines (Multiplexing)
+		// Display the count of MIN2 on selected 7seg
+		PORTA = 0xC8;
+		PORTC = (PORTC & 0xF0) | (_7seg.MIN2 & 0x0F);
+		break;
+	case 5:
+		// Enable 7seg of HOUR1 from selection lines (Multiplexing)
+		// Display the count of HOUR1 on selected 7seg
+		PORTA = 0xD0;
+		PORTC = (PORTC & 0xF0) | (_7seg.HOUR1 & 0x0F);
+		break;
+	case 6:
+		// Enable 7seg of HOUR2 from selection lines (Multiplexing)
+		// Display the count of HOUR2 on selected 7seg
+		PORTA = 0xE0;
+		PORTC = (PORTC & 0xF0) | (_7seg.HOUR2 & 0x0F);
+		break;
+	}
+}
+
+
+void pomodoroBuzzer(void){
+	if(((_7seg.MIN2*10 + _7seg.MIN1) % 25 == 0) && (_7seg.SEC1 == 0  && _7seg.SEC2 == 0)){
+		PORTD ^= (1<<PD0);
+		_delay_ms(10);
+	}
+	else{
+		PORTD &= ~(1<<PD0);
+	}
+}
+

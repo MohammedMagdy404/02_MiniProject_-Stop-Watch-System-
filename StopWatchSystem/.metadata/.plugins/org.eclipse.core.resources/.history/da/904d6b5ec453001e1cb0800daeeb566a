@@ -1,0 +1,14 @@
+/*
+ * header.h
+ *
+ *  Created on: Sep 15, 2023
+ *      Author: mm929
+ */
+
+#include <avr/io.h>
+#include <avr/interrupt.h>
+#include <util/delay.h>
+
+
+
+void INT0_init(void);
